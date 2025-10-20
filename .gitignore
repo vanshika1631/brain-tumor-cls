@@ -1,0 +1,47 @@
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+*.log
+
+# Virtual envs & secrets
+.venv/
+venv/
+.env
+.env.*
+
+# Editors
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model artifacts
+reports/*.pt
+reports/*.pth
+
+# ----- Data -----
+# ignore all data by default
+data/**
+
+# keep placeholders & the manifest
+!data/.gitkeep
+!data/processed/
+!data/processed/figshare_manifest.csv
+
+# ----- Reports -----
+reports/**
+!reports/.gitkeep
+
+# Misc cache/temp
+tmp/
+.cache/
+*.tmp
+
+# scratch/test files
+10MB

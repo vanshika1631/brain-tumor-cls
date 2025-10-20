@@ -1,0 +1,17 @@
+# core
+numpy
+pandas
+pillow
+imageio
+h5py
+
+# vision + preprocessing
+opencv-python-headless
+
+# PyTorch stack (don’t hard-pin; let pip/Colab resolve)
+torch
+torchvision
+torchmetrics
+
+# training niceties
+tqdm
