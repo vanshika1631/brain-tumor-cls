@@ -1,81 +1,134 @@
 import os
-import torch, torch.nn as nn, torch.optim as optim
+import argparse
+import torch
+import torch.nn as nn
+import torch.optim as optim
 from torchvision.models import resnet50, ResNet50_Weights
-from torchmetrics.classification import MulticlassAccuracy, MulticlassF1Score, MulticlassAUROC
+from torchmetrics.classification import (
+    MulticlassAccuracy, MulticlassF1Score, MulticlassAUROC
+)
 from torch.utils.data import DataLoader
 from src.data.dataloaders import ManifestDataset
 
-CSV="data/processed/figshare_manifest.csv"
-BATCH=32
-EPOCHS=25
-LR=3e-4
-NUM_CLASSES=3
-DEVICE="cuda" if torch.cuda.is_available() else "cpu"
-torch.manual_seed(42)
 
-def loaders():
-    tr = ManifestDataset(CSV,"train")
-    va = ManifestDataset(CSV,"val")
-    te = ManifestDataset(CSV,"test")
+def parse_args():
+    p = argparse.ArgumentParser()
+    # core training/data
+    p.add_argument("--csv", type=str,
+                   default=os.getenv("CSV", "data/processed/figshare_manifest.csv"))
+    p.add_argument("--batch", type=int, default=int(os.getenv("BATCH", 32)))
+    p.add_argument("--epochs", type=int, default=int(os.getenv("EPOCHS", 25)))
+    p.add_argument("--lr", type=float, default=float(os.getenv("LR", 3e-4)))
+    p.add_argument("--num_classes", type=int, default=int(os.getenv("NUM_CLASSES", 3)))
+    p.add_argument("--device", type=str,
+                   default=os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu"))
+    p.add_argument("--seed", type=int, default=int(os.getenv("SEED", 42)))
+    # optional W&B
+    p.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    p.add_argument("--wandb_project", type=str, default=os.getenv("WANDB_PROJECT", "idl"))
+    p.add_argument("--wandb_run_name", type=str, default=os.getenv("WANDB_RUN_NAME", "resnet50"))
+    return p.parse_args()
 
-    # macOS often behaves better with workers=0; Colab can use >0
-    workers = 0 if (os.uname().sysname == "Darwin" and DEVICE=="cpu") else 4
-    pin = (DEVICE=="cuda")
 
-    return (
-        DataLoader(tr,batch_size=BATCH,shuffle=True ,num_workers=workers,pin_memory=pin),
-        DataLoader(va,batch_size=BATCH,shuffle=False,num_workers=workers,pin_memory=pin),
-        DataLoader(te,batch_size=BATCH,shuffle=False,num_workers=workers,pin_memory=pin),
-    )
+def make_loaders(csv_path: str, batch_size: int):
+    tr = DataLoader(ManifestDataset(csv_path, "train"), batch_size=batch_size,
+                    shuffle=True, num_workers=2)
+    va = DataLoader(ManifestDataset(csv_path, "val"), batch_size=batch_size,
+                    shuffle=False, num_workers=2)
+    te = DataLoader(ManifestDataset(csv_path, "test"), batch_size=batch_size,
+                    shuffle=False, num_workers=2)
+    return tr, va, te
 
-def evaluate(m, loader):
-    m.eval()
-    acc=MulticlassAccuracy(num_classes=NUM_CLASSES,average='macro').to(DEVICE)
-    f1 =MulticlassF1Score (num_classes=NUM_CLASSES,average='macro').to(DEVICE)
-    auc=MulticlassAUROC  (num_classes=NUM_CLASSES).to(DEVICE)
-    loss_sum=0;n=0
-    ce=nn.CrossEntropyLoss()
-    with torch.no_grad():
-        for x,y in loader:
-            x,y=x.to(DEVICE),y.to(DEVICE)
-            logits=m(x); loss=ce(logits,y)
-            loss_sum+=loss.item()*x.size(0); n+=x.size(0)
-            prob=torch.softmax(logits,dim=1)
-            acc.update(prob,y); f1.update(prob,y); auc.update(prob,y)
-    return loss_sum/n, acc.compute().item(), f1.compute().item(), auc.compute().item()
+
+@torch.no_grad()
+def evaluate(model, loader, device):
+    model.eval()
+    loss_fn = nn.CrossEntropyLoss()
+    acc = MulticlassAccuracy(num_classes=model.fc.out_features).to(device)
+    f1 = MulticlassF1Score(num_classes=model.fc.out_features, average="macro").to(device)
+    auc = MulticlassAUROC(num_classes=model.fc.out_features, average="macro").to(device)
+
+    tot_loss = n = 0
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+        logits = model(x)
+        loss = loss_fn(logits, y)
+        tot_loss += loss.item() * len(x)
+        n += len(x)
+        acc.update(logits, y)
+        f1.update(logits, y)
+        auc.update(logits, y)
+
+    return (tot_loss / max(1, n),
+            acc.compute().item(),
+            f1.compute().item(),
+            auc.compute().item())
+
 
 def main():
-    tr,va,te = loaders()
-    m=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
-    m.fc=nn.Linear(m.fc.in_features,NUM_CLASSES)
-    m=m.to(DEVICE)
+    args = parse_args()
+    torch.manual_seed(args.seed)
 
-    opt=optim.AdamW(m.parameters(),lr=LR)
-    sch=optim.lr_scheduler.CosineAnnealingLR(opt,T_max=EPOCHS)
-    ce=nn.CrossEntropyLoss(label_smoothing=0.05)
+    # optional W&B
+    wb = None
+    if args.wandb:
+        import wandb
+        wb = wandb.init(project=args.wandb_project,
+                        name=args.wandb_run_name,
+                        config={k: v for k, v in vars(args).items()
+                                if k not in ["wandb"]})
 
-    best_f1=-1; best=None
-    os.makedirs("reports", exist_ok=True)
+    tr, va, te = make_loaders(args.csv, args.batch)
 
-    for e in range(1, EPOCHS+1):
-        m.train()
-        for x,y in tr:
-            x,y=x.to(DEVICE),y.to(DEVICE)
+    model = resnet50(weights=ResNet50_Weights.DEFAULT)
+    model.fc = nn.Linear(model.fc.in_features, args.num_classes)
+    model.to(args.device)
+
+    opt = optim.AdamW(model.parameters(), lr=args.lr)
+    loss_fn = nn.CrossEntropyLoss()
+
+    best_f1 = -1.0
+    best_state = None
+
+    for e in range(1, args.epochs + 1):
+        model.train()
+        running = n = 0
+        for x, y in tr:
+            x, y = x.to(args.device), y.to(args.device)
             opt.zero_grad()
-            loss=ce(m(x),y)
-            loss.backward(); opt.step()
-        sch.step()
+            logits = model(x)
+            loss = loss_fn(logits, y)
+            loss.backward()
+            opt.step()
+            running += loss.item() * len(x)
+            n += len(x)
 
-        vloss,vacc,vf1,vauc=evaluate(m,va)
+        vloss, vacc, vf1, vauc = evaluate(model, va, args.device)
         print(f"epoch {e:02d} | val loss {vloss:.4f} acc {vacc:.3f} f1 {vf1:.3f} auc {vauc:.3f}")
-        if vf1>best_f1:
-            best_f1=vf1
-            best={k:v.cpu() for k,v in m.state_dict().items()}
 
-    torch.save(best,"reports/best_resnet50.pt")
-    m.load_state_dict({k:v.to(DEVICE) for k,v in best.items()})
-    tloss,tacc,tf1,tauc = evaluate(m,te)
+        if wb:
+            wb.log({
+                "epoch": e,
+                "val/loss": vloss, "val/acc": vacc, "val/f1": vf1, "val/auroc": vauc,
+                "train/loss": running / max(1, n)
+            })
+
+        if vf1 > best_f1:
+            best_f1 = vf1
+            best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+
+    # save and final test
+    os.makedirs("reports", exist_ok=True)
+    torch.save(best_state, "reports/best_resnet50.pt")
+
+    model.load_state_dict({k: v.to(args.device) for k, v in best_state.items()})
+    tloss, tacc, tf1, tauc = evaluate(model, te, args.device)
     print(f"TEST | loss {tloss:.4f} acc {tacc:.3f} f1 {tf1:.3f} auc {tauc:.3f}")
 
-if __name__=="__main__":
+    if wb:
+        wb.log({"test/loss": tloss, "test/acc": tacc, "test/f1": tf1, "test/auroc": tauc})
+        wb.finish()
+
+
+if __name__ == "__main__":
     main()

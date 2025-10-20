@@ -8,10 +8,13 @@ h5py
 # vision + preprocessing
 opencv-python-headless
 
-# PyTorch stack (don’t hard-pin; let pip/Colab resolve)
+# PyTorch stack (let Colab resolve compatible CUDA wheels)
 torch
 torchvision
 torchmetrics
 
 # training niceties
 tqdm
+
+# experiment tracking (optional but supported by code)
+wandb

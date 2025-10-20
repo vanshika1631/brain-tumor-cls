@@ -14,34 +14,48 @@ __pycache__/
 venv/
 .env
 .env.*
+.python-version
 
-# Editors
+# Editors/IDEs
 .vscode/
+.idea/
+.history/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Model artifacts
-reports/*.pt
-reports/*.pth
+# Test/QA caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ----- Model artifacts -----
+reports/**
+!reports/.gitkeep
+*.pt
+*.pth
+*.bin
+*.onnx
+*.ckpt
+
+# wandb / run outputs
+wandb/
+runs/
+outputs/
 
 # ----- Data -----
 # ignore all data by default
 data/**
 
-# keep placeholders & the manifest
+# keep placeholders & the manifest (must come AFTER the blanket ignore)
 !data/.gitkeep
 !data/processed/
+!data/processed/.gitkeep
 !data/processed/figshare_manifest.csv
-
-# ----- Reports -----
-reports/**
-!reports/.gitkeep
 
 # Misc cache/temp
 tmp/
 .cache/
 *.tmp
-
-# scratch/test files
-10MB
