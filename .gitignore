@@ -59,3 +59,4 @@ data/**
 tmp/
 .cache/
 *.tmp
+flagshare_interim.zip
