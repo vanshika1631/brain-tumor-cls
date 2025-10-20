@@ -87,6 +87,9 @@ def main():
     opt = optim.AdamW(model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
 
+    # ensure reports/ exists once up front
+    os.makedirs("reports", exist_ok=True)
+
     best_f1 = -1.0
     best_state = None
 
@@ -113,12 +116,19 @@ def main():
                 "train/loss": running / max(1, n)
             })
 
+        # --- save LATEST every epoch ---
+        last_state = {k: v.cpu() for k, v in model.state_dict().items()}
+        torch.save(last_state, "reports/last_resnet50.pt")
+
+        # --- track BEST by validation F1 (save at end) ---
         if vf1 > best_f1:
             best_f1 = vf1
-            best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+            best_state = last_state  # already on CPU
 
-    # save and final test
-    os.makedirs("reports", exist_ok=True)
+    # save BEST and final test
+    if best_state is None:
+        # fallback in case no improvement recorded
+        best_state = {k: v.cpu() for k, v in model.state_dict().items()}
     torch.save(best_state, "reports/best_resnet50.pt")
 
     model.load_state_dict({k: v.to(args.device) for k, v in best_state.items()})
