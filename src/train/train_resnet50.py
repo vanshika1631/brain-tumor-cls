@@ -9,6 +9,13 @@ from torchmetrics.classification import (
 )
 from torch.utils.data import DataLoader
 from src.data.dataloaders import ManifestDataset
+from tqdm.auto import tqdm  # progress bar
+
+
+def str_to_bool(s: str) -> bool:
+    if isinstance(s, bool):
+        return s
+    return s.lower() not in {"0", "no", "false", "off"}
 
 
 def parse_args():
@@ -27,6 +34,15 @@ def parse_args():
     p.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
     p.add_argument("--wandb_project", type=str, default=os.getenv("WANDB_PROJECT", "idl"))
     p.add_argument("--wandb_run_name", type=str, default=os.getenv("WANDB_RUN_NAME", "resnet50"))
+    # progress bar (default: on; pass --progress false to disable)
+    p.add_argument("--progress", type=str_to_bool,
+                   default=str_to_bool(os.getenv("PROGRESS", "true")),
+                   help="Show tqdm progress bar (true/false).")
+    # optional speed/debug toggles (used from Colab)
+    p.add_argument("--dry_run", action="store_true",
+                   help="1 epoch, tiny number of batches for quick sanity.")
+    p.add_argument("--limit_batches", type=int, default=int(os.getenv("LIMIT_BATCHES", "0")),
+                   help="If >0, cap number of training batches per epoch.")
     return p.parse_args()
 
 
@@ -90,21 +106,37 @@ def main():
     # ensure reports/ exists once up front
     os.makedirs("reports", exist_ok=True)
 
+    # debug/dry-run helpers
+    epochs = 1 if args.dry_run else args.epochs
+    limit_batches = 3 if args.dry_run else max(0, int(args.limit_batches))
+
     best_f1 = -1.0
     best_state = None
 
-    for e in range(1, args.epochs + 1):
+    for e in range(1, epochs + 1):
         model.train()
         running = n = 0
-        for x, y in tr:
+
+        iterable = tr
+        if args.progress:
+            iterable = tqdm(tr, total=len(tr), desc=f"epoch {e}/{epochs}", leave=False)
+
+        for b_idx, (x, y) in enumerate(iterable):
             x, y = x.to(args.device), y.to(args.device)
             opt.zero_grad()
             logits = model(x)
             loss = loss_fn(logits, y)
             loss.backward()
             opt.step()
+
             running += loss.item() * len(x)
             n += len(x)
+
+            if args.progress:
+                iterable.set_postfix({"train_loss": f"{(running/max(1, n)):.4f}"})
+
+            if limit_batches and (b_idx + 1) >= limit_batches:
+                break
 
         vloss, vacc, vf1, vauc = evaluate(model, va, args.device)
         print(f"epoch {e:02d} | val loss {vloss:.4f} acc {vacc:.3f} f1 {vf1:.3f} auc {vauc:.3f}")
@@ -142,4 +174,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
