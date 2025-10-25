@@ -4,6 +4,9 @@ pandas
 pillow
 imageio
 h5py
+tensorflow
+scikit-learn
+
 
 # vision + preprocessing
 opencv-python-headless
