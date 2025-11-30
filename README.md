@@ -8,27 +8,37 @@ Pituitary Tumor: A tumor that occurs in the pituitary gland, which is responsibl
 
 Glioma: A type of tumor that begins in the glial cells of the brain, which provide support and protection for neurons.
 
-## Current Progress
+## Implemented Methods
 
-The baseline ResNet50 model for feature extraction and tumor classification has been implemented and is performing well.
+### Baseline & Feature Extraction
 
-We are currently working on integrating the Radial Basis Probabilistic Neural Network (RBPNN) classifier to further improve classification accuracy and precision.
+The project uses deep learning backbones for feature extraction. We have implemented and compared the following architectures:
 
-In addition to improving the model, we plan to expand our dataset to include more variations, such as blurred images, noisy images, and images with no tumors. This will help the model generalize better and improve its robustness across different scenarios.
+- **ResNet50** (Baseline)
+- **EfficientNet_B0**
+- **ConvNeXt_Tiny**
 
-The hybrid model we are developing will use ResNet50 for feature representation. The extracted embeddings will then be passed into the RBPNN classifier, which will help sharpen decision boundaries, improve robustness across datasets, and provide clearer uncertainty signals.
+### RBPNN Classifier
 
-In parallel, we are planning future ablations to test different models. We will swap the RBPNN for alternative heads and backbones, including:
+We have integrated a **Radial Basis Probabilistic Neural Network (RBPNN)** classifier. This hybrid model uses the deep learning backbones for feature representation and passes the embeddings to the RBPNN. This approach aims to:
 
-- Linear SVMs on embeddings
+- Sharpen decision boundaries.
+- Improve robustness across datasets.
+- Provide clearer uncertainty signals via probabilistic outputs (`predict_proba`).
 
-- Shallow MLP classifiers
+### Comparative Analysis
 
-- Logistic regression
+To isolate the gains from the RBPNN probabilistic head, we have implemented a comprehensive benchmarking suite comparing it against standard classifiers on the same embeddings:
 
-- Alternative feature extractors like EfficientNet or ConvNeXt
+- Linear SVM
+- Shallow MLP (Multi-Layer Perceptron)
+- Logistic Regression
 
-This will allow us to separate the gains from the probabilistic head (RBPNN) from those that come from different feature extractors. By doing so, we can ensure that any improvements are not solely tied to a single modeling choice.
+The `IDL_Project.ipynb` notebook contains the full pipeline for training, evaluation, and visualization of these comparisons.
+
+### Future Work
+
+We plan to expand our dataset to include more variations, such as blurred images, noisy images, and images with no tumors, to further test model robustness.
 
 ## Table of Contents
 
@@ -94,10 +104,12 @@ brain-tumor-cls/
 
 This project requires the following Python libraries:
 
-- TensorFlow/Keras
-- NumPy
-- Matplotlib
+- PyTorch (Core framework)
+- Torchvision
 - Scikit-learn
+- NumPy
+- Pandas
+- Matplotlib / Seaborn
 - Pandas
 - OpenCV (if using image processing)
 
