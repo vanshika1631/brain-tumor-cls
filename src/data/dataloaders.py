@@ -14,7 +14,7 @@ def make_albu_transforms(split):
         return A.Compose([
             A.HorizontalFlip(p=0.5),                         # left/right symmetry ok
             A.Rotate(limit=15, border_mode=1, p=0.7),         # small rotations only
-            A.RandomResizedCrop(224, 224, scale=(0.9, 1.1), p=0.7),
+            A.RandomResizedCrop(224, 224, scale=(0.9, 1.0), p=0.7),
 
             # ---- Intensity-based transforms (MRI-specific) ----
             A.RandomBrightnessContrast(brightness_limit=0.2,
