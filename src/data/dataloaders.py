@@ -12,29 +12,24 @@ IMAGENET_STD =[0.229,0.224,0.225]
 def make_albu_transforms(split):
     if split == "train":
         return A.Compose([
-            A.HorizontalFlip(p=0.5),                         # left/right symmetry ok
-            A.Rotate(limit=15, border_mode=1, p=0.7),         # small rotations only
+            A.HorizontalFlip(p=0.5),                       
+            A.Rotate(limit=15, border_mode=1, p=0.7),     
             A.RandomResizedCrop(224, 224, scale=(0.9, 1.1), p=0.7),
 
-            # ---- Intensity-based transforms (MRI-specific) ----
             A.RandomBrightnessContrast(brightness_limit=0.2,
                                        contrast_limit=0.2, p=0.3),
-            A.RandomGamma(gamma_limit=(80, 120), p=0.3),      # simulates scanner differences
+            A.RandomGamma(gamma_limit=(80, 120), p=0.3),      
             A.CLAHE(clip_limit=2.0, tile_grid_size=(8,8), p=0.2),
 
-            # ---- Noise models ----
-            A.GaussNoise(var_limit=(5, 30), p=0.3),           # MRI noise
-            A.GaussianBlur(blur_limit=(3, 7), p=0.2),         # slight blur
+            A.GaussNoise(var_limit=(5, 30), p=0.3),          
+            A.GaussianBlur(blur_limit=(3, 7), p=0.2),     
 
-            # ---- Elastic/affine transforms ----
             A.ElasticTransform(alpha=10, sigma=10, alpha_affine=5, p=0.2),
             A.Affine(scale=(0.95, 1.05),
                      translate_percent=(0.02, 0.02),
                      rotate=0,
                      shear=0,
                      p=0.25),
-
-            # ---- Local occlusion (robustness to missing tumor pixels) ----
             A.CoarseDropout(
                 max_holes=2,
                 max_height=40,
@@ -44,7 +39,6 @@ def make_albu_transforms(split):
                 p=0.3
             ),
 
-            # ---- Normalize + ToTensor ----
             A.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
             ToTensorV2(),
         ])
